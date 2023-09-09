@@ -4,21 +4,16 @@ using System.Text;
 namespace Tetris;
 internal class Program
 {
-    //static Timer gameTimer = new Timer(GameLoop, null, 0, 1000); // Temporizador de 100 ms
-
-    private static int currentX = fieldWidth / 2;
+    private static int currentX = fieldWidth / 2 - 2;
     private static int currentY = 0;
     private static int currentRotation = 0;
     private static int currentPiece = 0;
-    private static Random random = new Random();
+    private static readonly Random random = new();
 
+    private static readonly List<int> pLines = new();
 
-    //static bool isMovingLeft = false;
-    //static bool isMovingRight = false;
-
-    // Variables globales
     private const int fieldWidth = 12;
-    private const int fieldHeight = 18;
+    private const int fieldHeight = 20;
 
     // Pieza del tetris
     private static readonly string[] tetromino = new string[]
@@ -45,29 +40,30 @@ internal class Program
     };
 
     // Campo de juego
-    private static byte[] field = new byte[fieldWidth * fieldHeight];
+    private static readonly byte[] field = new byte[fieldWidth * fieldHeight];
 
     // pantalla 
-    private static string[] screen = new string[fieldWidth * fieldHeight];
+    private static readonly string[] screen = new string[fieldWidth * fieldHeight];
 
     // Funcion principal
     static void Main(string[] args)
     {
         // Instancia para que la consola imprima caracteres UTF8
         Console.OutputEncoding = Encoding.UTF8;
+        Console.CursorVisible = false;
+        Console.Title = "Tetris Game";
         InitField();
-        currentPiece = random.Next() % 7;
+        bool isGameOver = false;
+        currentPiece = random.Next(7);
         // time
 
-        const int frameRate = 1; // Velocidad de fotogramas por segundo (FPS)
-        const double frameInterval = 1000.0 / frameRate; // Intervalo de tiempo entre fotogramas
+        const int frameRate = 10; // Velocidad de fotogramas por segundo (FPS)
+        const double frameInterval = 10000.0 / frameRate; // Intervalo de tiempo entre fotogramas
 
-        Stopwatch stopwatch = new Stopwatch();
+        Stopwatch stopwatch = new();
         stopwatch.Start();
 
-
-
-        while (true)
+        while (!isGameOver)
         {
             // Registrar el tiempo actual
             double elapsedMilliseconds = stopwatch.Elapsed.TotalMilliseconds;
@@ -76,8 +72,7 @@ internal class Program
             if (elapsedMilliseconds >= frameInterval)
             {
                 // Llamar a tu método GameLoop para actualizar el juego
-                GameLoop();
-
+                isGameOver = GameLoop();
                 // Reiniciar el reloj para el siguiente intervalo
                 stopwatch.Restart();
             }
@@ -85,45 +80,45 @@ internal class Program
             #region Implementacion de las entradas (input)
             if (Console.KeyAvailable)
             {
+                ClearPiece();
+                
                 ConsoleKey key = Console.ReadKey(true).Key;
-
-                if (key == ConsoleKey.LeftArrow && DoesPieceFit(currentPiece, currentRotation, currentX - 1, currentY))
-                {
-                    ClearPiece();
-                    currentX--;
-                }
-                else if (key == ConsoleKey.RightArrow && DoesPieceFit(currentPiece, currentRotation, currentX + 1, currentY))
-                {
-                    ClearPiece();
-                    currentX++;
-                }
-                else if (key == ConsoleKey.DownArrow && DoesPieceFit(currentPiece, currentRotation, currentX, currentY + 1))
-                {
-                    ClearPiece();
-                    currentY++;
-                }
-                else if (key == ConsoleKey.Z && DoesPieceFit(currentPiece, currentRotation + 1, currentX, currentY))
-                {
-                    ClearPiece();
-                    currentRotation++;
-                }
-                // Añade aquí más lógica para otras teclas si es necesario
+                
+                currentX -= (key == ConsoleKey.LeftArrow && DoesPieceFit(currentPiece, currentRotation, currentX - 1, currentY)) ? 1 : 0;
+                currentX += (key == ConsoleKey.RightArrow && DoesPieceFit(currentPiece, currentRotation, currentX + 1, currentY)) ? 1 : 0;
+                currentY += (key == ConsoleKey.DownArrow && DoesPieceFit(currentPiece, currentRotation, currentX, currentY + 1)) ? 1 : 0;
+                currentRotation += (key == ConsoleKey.Z && DoesPieceFit(currentPiece, currentRotation + 1, currentX, currentY)) ? 1 : 0;
             }
             #endregion
+
+            // Display
+            //Console.Clear();
+            // Dibuja la pieza actual
+            DrawPiece(false);
+
+            // Dibuja la el campo
+            DrawField();
+
+            // Dibuja la pantalla
+            DrawScreen();
+
+        }
+        if(isGameOver)
+        {
+            Console.Clear();
+            Console.WriteLine("Fin del juego =(");
         }
     }
 
-    private static void GameLoop()
-    {
-        Console.Clear();
 
+    private static bool GameLoop()
+    {
         // Comprobamos si puede bajar
         if (DoesPieceFit(currentPiece, currentRotation, currentX, currentY + 1))
         {
             // Movemos la pieza hacia abajo
             ClearPiece();
             currentY++;
-
         }
         else
         {
@@ -146,41 +141,53 @@ internal class Program
                         }
                     }
 
+                    // posible cambio
                     if (isRowComplete)
                     {
+                        pLines.Add(py + currentY);
                         // Eliminar la fila completa
-                        for (int px = 1; px < fieldWidth - 1; px++)
-                        {
-                            field[(currentY + py) * fieldWidth + px] = 8;
-                        }
+                        //for (int px = 1; px < fieldWidth - 1; px++)
+                        //    field[(currentY + py) * fieldWidth + px] = 8;
                     }
                 }
             }
+            // Correr las piezas
+            if (pLines.Count > 0)
+            {
+                // Efecto de eliminacion de las filas
+                RowDeletionEffect();
 
+                bool isRowEmpty = false;
+                int index = pLines[0] - 1;
+                int spaceToMove = pLines.Count;
+                while (!isRowEmpty)
+                {
+                    isRowEmpty = true;
+                    for (int px = 1; px < fieldWidth - 1; px++)
+                    {
+                        if (field[index * fieldWidth + px] != 8)
+                        {
+                            field[(index + spaceToMove) * fieldWidth + px] = field[index * fieldWidth + px];
+                            field[index * fieldWidth + px] = 8;
+                            isRowEmpty = false;
+                        }
+                    }
+                    index--;
+                }
+            }
+
+            pLines.Clear();
             // Generar una nueva pieza aleatoria
-            currentPiece = random.Next(0, 10000) % 7;
-            currentX = fieldWidth / 2;
+            currentPiece = random.Next(7);
+            currentX = fieldWidth / 2 - 2;
             currentY = 0;
+            currentRotation = random.Next(4);
 
             // Verifica si es fin del juego
-            // Implementar la logica
+            if (!DoesPieceFit(currentPiece, currentRotation, currentX, currentY)) return true;
+            
         }
-
-
-        // Display
-
-        // Dibuja la pieza actual
-        DrawPiece(false);
-
-        // Dibuja la el campo
-        DrawField();
-
-        // Dibujar la animacion
-        // <--------------------------->
-
-        // Dibuja la pantalla
-        DrawScreen();
-
+        return false;
     }
 
     // Metodo para rotar la pieza
@@ -215,6 +222,7 @@ internal class Program
     // Metodo para pintar la pantalla
     public static void DrawScreen()
     {
+        Console.SetCursorPosition(0, 0);
         for (int py = 0; py < fieldHeight; py++)
         {
             for (int px = 0; px < fieldWidth; px++)
@@ -310,5 +318,21 @@ internal class Program
             }
         }
         return true;
+    }
+
+    public static void RowDeletionEffect()
+    {
+        for (int px = (fieldWidth - 2) / 2; px > 0; px--)
+        {
+            foreach (var pLine in pLines)
+            {
+                field[pLine * fieldWidth + px] = 8;
+                field[pLine * fieldWidth + fieldWidth - 1 - px] = 8;
+            }
+            // Mostrar
+            DrawField();
+            DrawScreen();
+            Thread.Sleep(50);
+        }
     }
 }
